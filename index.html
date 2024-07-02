@@ -242,39 +242,46 @@
     }
 
     async function fetchResponse(userInput) {
-      try {
-        const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ question: userInput, user_id: userId })
-        });
+  try {
+    const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ question: userInput, user_id: userId })
+    });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data && data.answer) {
-          const utterance = new SpeechSynthesisUtterance(data.answer);
-          const mouthInterval = animateMouth(true);
-
-          utterance.onend = () => {
-            clearInterval(mouthInterval);
-            animateMouth(false);
-          };
-
-          responseDiv.textContent = data.answer;
-          speechSynthesis.speak(utterance);
-        } else {
-          responseDiv.textContent = "No answer received.";
-        }
-      } catch (error) {
-        console.error('Error fetching response:', error);
-        responseDiv.textContent = "Error fetching response. Please try again.";
-      }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    const data = await response.json();
+    if (data && data.answer) {
+      const utterance = new SpeechSynthesisUtterance(data.answer);
+
+      // Customize voice characteristics
+      utterance.voice = speechSynthesis.getVoices().find(voice => voice.name === 'Google UK English Male');
+      utterance.pitch = 1; // Range from 0 to 2
+      utterance.rate = 1; // Range from 0.1 to 10
+
+      const mouthInterval = animateMouth(true);
+
+      utterance.onend = () => {
+        clearInterval(mouthInterval);
+        animateMouth(false);
+      };
+
+      responseDiv.textContent = data.answer;
+      speechSynthesis.speak(utterance);
+    } else {
+      responseDiv.textContent = "No answer received.";
+    }
+  } catch (error) {
+    console.error('Error fetching response:', error);
+    responseDiv.textContent = "Error fetching response. Please try again.";
+  }
+}
+
 
     micButton.addEventListener('mousedown', startListening);
     micButton.addEventListener('mouseup', stopListening);
