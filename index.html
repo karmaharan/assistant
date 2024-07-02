@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base href="https://websim.ai" />
+<title>Assistant - Real-time Voice Interaction</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+  .assistant-container {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    width: 80%;
+    max-width: 800px;
+    text-align: center;
+  }
+  h1 {
+    color: #ffffff;
+    font-size: 2.5em;
+    margin-bottom: 20px;
+  }
+  .avatar {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 20px;
+    position: relative;
+  }
+  .avatar-face {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #f0f0f0;
+    position: relative;
+    overflow: hidden;
+  }
+  .eye {
+    width: 30px;
+    height: 30px;
+    background: #333;
+    border-radius: 50%;
+    position: absolute;
+    top: 40px;
+  }
+  .eye.left {
+    left: 40px;
+  }
+  .eye.right {
+    right: 40px;
+  }
+  .mouth {
+    width: 80px;
+    height: 40px;
+    border-radius: 0 0 40px 40px;
+    border: 10px solid #333;
+    border-top: none;
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .controls {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  .button {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    padding: 10px 20px;
+    margin: 0 10px;
+    border-radius: 50px;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+  .button:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  .response {
+    color: #ffffff;
+    font-size: 1.2em;
+    margin-top: 20px;
+    height: 100px;
+    overflow-y: auto;
+  }
+  #visualizer {
+    width: 100%;
+    height: 50px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+  <div class="assistant-container">
+    <h1>WebSim AI Assistant</h1>
+    <div class="avatar">
+      <div class="avatar-face">
+        <div class="eye left"></div>
+        <div class="eye right"></div>
+        <div class="mouth"></div>
+      </div>
+    </div>
+    <div class="response" id="response">
+      Hello! I'm your WebSim AI Assistant. Press and hold the microphone button to speak.
+    </div>
+    <canvas id="visualizer"></canvas>
+    <div class="controls">
+      <button class="button" id="micButton">🎤 Hold to Speak</button>
+    </div>
+  </div>
+
+  <script>
+    const micButton = document.getElementById('micButton');
+    const responseDiv = document.getElementById('response');
+    const leftEye = document.querySelector('.eye.left');
+    const rightEye = document.querySelector('.eye.right');
+    const mouth = document.querySelector('.mouth');
+    const visualizer = document.getElementById('visualizer');
+    const visualizerContext = visualizer.getContext('2d');
+
+    let isListening = false;
+    let audioContext;
+    let analyser;
+    let microphone;
+    let javascriptNode;
+    let recognition;
+    let userId = 'user123'; // Replace with actual user ID if available
+
+    function animateEyes() {
+      const maxMove = 5;
+      setInterval(() => {
+        const leftX = Math.random() * maxMove - maxMove / 2;
+        const leftY = Math.random() * maxMove - maxMove / 2;
+        const rightX = Math.random() * maxMove - maxMove / 2;
+        const rightY = Math.random() * maxMove - maxMove / 2;
+
+        leftEye.style.transform = `translate(${leftX}px, ${leftY}px)`;
+        rightEye.style.transform = `translate(${rightX}px, ${rightY}px)`;
+      }, 200);
+    }
+
+    function animateMouth(talking) {
+      if (talking) {
+        let open = true;
+        const interval = setInterval(() => {
+          mouth.style.height = open ? '20px' : '40px';
+          open = !open;
+        }, 100);
+        return interval;
+      } else {
+        mouth.style.height = '40px';
+      }
+    }
+
+    function setupAudioContext() {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+      analyser.smoothingTimeConstant = 0.8;
+      analyser.fftSize = 1024;
+
+      javascriptNode.connect(audioContext.destination);
+    }
+
+    function startListening() {
+      if (!audioContext) setupAudioContext();
+
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          microphone = audioContext.createMediaStreamSource(stream);
+          microphone.connect(analyser);
+          analyser.connect(javascriptNode);
+
+          javascriptNode.onaudioprocess = () => {
+            const array = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(array);
+            const values = array.reduce((a, b) => a + b) / array.length;
+            drawVisualizer(values);
+          };
+
+          recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+          recognition.continuous = true;
+          recognition.interimResults = false;
+
+          recognition.onresult = event => {
+            const userInput = event.results[0][0].transcript;
+            responseDiv.textContent = "Processing...";
+            fetchResponse(userInput);
+          };
+
+          recognition.onend = () => {
+            if (isListening) recognition.start(); // Restart recognition if still listening
+          };
+
+          recognition.onerror = event => {
+            console.error('Speech recognition error:', event.error);
+            responseDiv.textContent = "Error recognizing speech. Please try again.";
+          };
+
+          recognition.start();
+          isListening = true;
+          responseDiv.textContent = "Listening...";
+        })
+        .catch(err => {
+          console.error('Error accessing microphone:', err);
+          responseDiv.textContent = "Error accessing microphone. Please make sure it's connected and you've granted permission.";
+        });
+    }
+
+    function stopListening() {
+      if (microphone) {
+        microphone.disconnect();
+        analyser.disconnect();
+        javascriptNode.disconnect();
+        isListening = false;
+        recognition.stop();
+      }
+    }
+
+    function drawVisualizer(values) {
+      visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
+      const height = values * visualizer.height / 255;
+      const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
+      gradient.addColorStop(1, '#1a2a6c');
+      gradient.addColorStop(0.5, '#b21f1f');
+      gradient.addColorStop(0, '#fdbb2d');
+      visualizerContext.fillStyle = gradient;
+      visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
+    }
+
+    async function fetchResponse(userInput) {
+      try {
+        const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ question: userInput, user_id: userId })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data && data.answer) {
+          const utterance = new SpeechSynthesisUtterance(data.answer);
+          const mouthInterval = animateMouth(true);
+
+          utterance.onend = () => {
+            clearInterval(mouthInterval);
+            animateMouth(false);
+          };
+
+          responseDiv.textContent = data.answer;
+          speechSynthesis.speak(utterance);
+        } else {
+          responseDiv.textContent = "No answer received.";
+        }
+      } catch (error) {
+        console.error('Error fetching response:', error);
+        responseDiv.textContent = "Error fetching response. Please try again.";
+      }
+    }
+
+    micButton.addEventListener('mousedown', startListening);
+    micButton.addEventListener('mouseup', stopListening);
+    micButton.addEventListener('mouseleave', stopListening);
+
+    animateEyes();
+  </script>
+</body>
+</html>
+
