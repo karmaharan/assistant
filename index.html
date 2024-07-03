@@ -179,6 +179,10 @@
     function startListening() {
       if (!audioContext) setupAudioContext();
 
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+      }
+
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
           microphone = audioContext.createMediaStreamSource(stream);
@@ -203,6 +207,7 @@
             responseDiv.textContent = userInput;
 
             if (event.results[0].isFinal) {
+              stopListening();
               fetchResponse(userInput);
             }
           };
@@ -270,11 +275,11 @@
           utterance.pitch = 1; // Range from 0 to 2
           utterance.rate = 1; // Range from 0.1 to 10
 
-          const mouthInterval = animateMouth(true);
+          animateMouth(true);
 
           utterance.onend = () => {
-            clearInterval(mouthInterval);
             animateMouth(false);
+            startListening(); // Restart listening after response is complete
           };
 
           responseDiv.textContent = data.answer;
@@ -282,10 +287,12 @@
           visualizeAIResponse(utterance);
         } else {
           responseDiv.textContent = "No answer received.";
+          startListening(); // Restart listening if no answer received
         }
       } catch (error) {
         console.error('Error fetching response:', error);
         responseDiv.textContent = "Error fetching response. Please try again.";
+        startListening(); // Restart listening on error
       }
     }
 
