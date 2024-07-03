@@ -137,6 +137,7 @@
     let javascriptNode;
     let recognition;
     let userId = 'user123'; // Replace with actual user ID if available
+    let mouthInterval;
 
     function animateEyes() {
       const maxMove = 5;
@@ -154,12 +155,12 @@
     function animateMouth(talking) {
       if (talking) {
         let open = true;
-        const interval = setInterval(() => {
+        mouthInterval = setInterval(() => {
           mouth.style.height = open ? '20px' : '40px';
           open = !open;
         }, 100);
-        return interval;
       } else {
+        clearInterval(mouthInterval);
         mouth.style.height = '40px';
       }
     }
@@ -193,12 +194,17 @@
 
           recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
           recognition.continuous = true;
-          recognition.interimResults = false;
+          recognition.interimResults = true;
 
           recognition.onresult = event => {
-            const userInput = event.results[0][0].transcript;
-            responseDiv.textContent = "Processing...";
-            fetchResponse(userInput);
+            const userInput = Array.from(event.results)
+                                  .map(result => result[0].transcript)
+                                  .join('');
+            responseDiv.textContent = userInput;
+
+            if (event.results[0].isFinal) {
+              fetchResponse(userInput);
+            }
           };
 
           recognition.onend = () => {
@@ -242,46 +248,68 @@
     }
 
     async function fetchResponse(userInput) {
-  try {
-    const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask2', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ question: userInput, user_id: userId })
-    });
+      try {
+        const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ question: userInput, user_id: userId })
+        });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data && data.answer) {
+          const utterance = new SpeechSynthesisUtterance(data.answer);
+
+          // Customize voice characteristics
+          utterance.voice = speechSynthesis.getVoices().find(voice => voice.name === 'Google UK English Male');
+          utterance.pitch = 1; // Range from 0 to 2
+          utterance.rate = 1; // Range from 0.1 to 10
+
+          const mouthInterval = animateMouth(true);
+
+          utterance.onend = () => {
+            clearInterval(mouthInterval);
+            animateMouth(false);
+          };
+
+          responseDiv.textContent = data.answer;
+          speechSynthesis.speak(utterance);
+          visualizeAIResponse(utterance);
+        } else {
+          responseDiv.textContent = "No answer received.";
+        }
+      } catch (error) {
+        console.error('Error fetching response:', error);
+        responseDiv.textContent = "Error fetching response. Please try again.";
+      }
     }
 
-    const data = await response.json();
-    if (data && data.answer) {
-      const utterance = new SpeechSynthesisUtterance(data.answer);
-
-      // Customize voice characteristics
-      utterance.voice = speechSynthesis.getVoices().find(voice => voice.name === 'Google UK English Male');
-      utterance.pitch = 1; // Range from 0 to 2
-      utterance.rate = 1; // Range from 0.1 to 10
-
-      const mouthInterval = animateMouth(true);
-
-      utterance.onend = () => {
-        clearInterval(mouthInterval);
-        animateMouth(false);
+    function visualizeAIResponse(utterance) {
+      utterance.onstart = () => {
+        const drawAIVisualizer = () => {
+          visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
+          const values = Math.random() * visualizer.height;
+          const height = values * visualizer.height / 255;
+          const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
+          gradient.addColorStop(1, '#1a2a6c');
+          gradient.addColorStop(0.5, '#b21f1f');
+          gradient.addColorStop(0, '#fdbb2d');
+          visualizerContext.fillStyle = gradient;
+          visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
+          if (!speechSynthesis.speaking) {
+            cancelAnimationFrame(drawAIVisualizer);
+          } else {
+            requestAnimationFrame(drawAIVisualizer);
+          }
+        };
+        requestAnimationFrame(drawAIVisualizer);
       };
-
-      responseDiv.textContent = data.answer;
-      speechSynthesis.speak(utterance);
-    } else {
-      responseDiv.textContent = "No answer received.";
     }
-  } catch (error) {
-    console.error('Error fetching response:', error);
-    responseDiv.textContent = "Error fetching response. Please try again.";
-  }
-}
-
 
     micButton.addEventListener('mousedown', startListening);
     micButton.addEventListener('mouseup', stopListening);
@@ -291,4 +319,3 @@
   </script>
 </body>
 </html>
-
