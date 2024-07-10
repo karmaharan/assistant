@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   let userId = 'user123'; // Replace with actual user ID if available
   let mouthInterval;
   let inactivityTimeout;
-  const triggerWord = 'pink mango green orange'; // Your trigger word
+  const triggerWord = 'hello assistant'; // Your trigger word
 
   function animateEyes() {
     const maxMove = 5;
@@ -291,7 +291,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
         responseDiv.textContent = data.answer;
         speechSynthesis.speak(utterance);
-        monitorUserSpeechDuringResponse();
+        monitorUserSpeechDuringResponse(utterance);
       } else {
         responseDiv.textContent = "No answer received.";
         startTriggerListening(); // Restart listening for trigger word if no answer received
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
   }
 
-  function monitorUserSpeechDuringResponse() {
+  function monitorUserSpeechDuringResponse(utterance) {
     if (!audioContext) setupAudioContext();
 
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -316,11 +316,9 @@ document.addEventListener('DOMContentLoaded', (event) => {
           analyser.getByteFrequencyData(array);
           const values = array.reduce((a, b) => a + b) / array.length;
 
-          if (values > 0) { // Threshold value for detecting user speech
-            if (speechSynthesis.speaking) {
-              speechSynthesis.cancel();
-              startTriggerListening(); // Restart listening for trigger word
-            }
+          if (values > 0 && speechSynthesis.speaking) { // Threshold value for detecting user speech
+            speechSynthesis.cancel();
+            startTriggerListening(); // Restart listening for trigger word
           }
         };
 
@@ -375,6 +373,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   startTriggerListening();
   animateEyes();
 });
+
  </script>
 </body>
 </html>
