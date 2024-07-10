@@ -104,258 +104,217 @@
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', (event) => {
-        const responseDiv = document.getElementById('response');
-        const leftEye = document.querySelector('.eye.left');
-        const rightEye = document.querySelector('.eye.right');
-        const mouth = document.querySelector('.mouth');
-        const visualizer = document.getElementById('visualizer');
-        const visualizerContext = visualizer.getContext('2d');
+document.addEventListener('DOMContentLoaded', (event) => {
+    const responseDiv = document.getElementById('response');
+    const leftEye = document.querySelector('.eye.left');
+    const rightEye = document.querySelector('.eye.right');
+    const mouth = document.querySelector('.mouth');
+    const visualizer = document.getElementById('visualizer');
+    const visualizerContext = visualizer.getContext('2d');
 
-        let isListening = false;
-        let audioContext;
-        let analyser;
-        let microphone;
-        let javascriptNode;
-        let recognition;
-        let userId = 'user123';
-        let mouthInterval;
-        let inactivityTimeout;
-        let lastSpeechTimestamp = Date.now();
-        let isAssistantSpeaking = false;
-        let currentUtterance = null;
+    let isListening = false;
+    let recognition;
+    let audioContext;
+    let analyser;
+    let microphone;
+    let javascriptNode;
+    let userId = 'user123';
+    let mouthInterval;
 
-        function setupAudioContext() {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+    function setupAudioContext() {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
-            analyser.smoothingTimeConstant = 0.8;
-            analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 1024;
 
-            javascriptNode.connect(audioContext.destination);
+        javascriptNode.connect(audioContext.destination);
+    }
+
+    function animateAvatar() {
+        // Eye movement
+        setInterval(() => {
+            const maxMove = 5;
+            const leftX = Math.random() * maxMove - maxMove / 2;
+            const leftY = Math.random() * maxMove - maxMove / 2;
+            const rightX = Math.random() * maxMove - maxMove / 2;
+            const rightY = Math.random() * maxMove - maxMove / 2;
+
+            leftEye.style.transform = `translate(${leftX}px, ${leftY}px)`;
+            rightEye.style.transform = `translate(${rightX}px, ${rightY}px)`;
+        }, 2000);
+
+        // Blinking
+        setInterval(() => {
+            leftEye.style.height = '0px';
+            rightEye.style.height = '0px';
+            setTimeout(() => {
+                leftEye.style.height = '30px';
+                rightEye.style.height = '30px';
+            }, 200);
+        }, 5000);
+    }
+
+    function animateMouth(talking) {
+        if (talking) {
+            clearInterval(mouthInterval);
+            let open = true;
+            mouthInterval = setInterval(() => {
+                mouth.style.height = open ? '20px' : '40px';
+                open = !open;
+            }, 200);
+        } else {
+            clearInterval(mouthInterval);
+            mouth.style.height = '40px';
+        }
+    }
+
+    function toggleListening() {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    }
+
+    function startListening() {
+        if (!('webkitSpeechRecognition' in window)) {
+            responseDiv.textContent = "Speech recognition is not supported in this browser. Please try Chrome.";
+            return;
         }
 
-        function animateAvatar() {
-            // Eye movement
-            setInterval(() => {
-                const maxMove = 5;
-                const leftX = Math.random() * maxMove - maxMove / 2;
-                const leftY = Math.random() * maxMove - maxMove / 2;
-                const rightX = Math.random() * maxMove - maxMove / 2;
-                const rightY = Math.random() * maxMove - maxMove / 2;
+        setupAudioContext();
 
-                leftEye.style.transform = `translate(${leftX}px, ${leftY}px)`;
-                rightEye.style.transform = `translate(${rightX}px, ${rightY}px)`;
-            }, 2000);
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                analyser.connect(javascriptNode);
 
-            // Blinking
-            setInterval(() => {
-                leftEye.style.height = '0px';
-                rightEye.style.height = '0px';
-                setTimeout(() => {
-                    leftEye.style.height = '30px';
-                    rightEye.style.height = '30px';
-                }, 200);
-            }, 5000);
-        }
+                javascriptNode.onaudioprocess = () => {
+                    const array = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(array);
+                    const values = array.reduce((a, b) => a + b) / array.length;
+                    drawVisualizer(values);
+                };
 
-        function animateMouth(talking) {
-            if (talking) {
-                clearInterval(mouthInterval);
-                let open = true;
-                mouthInterval = setInterval(() => {
-                    mouth.style.height = open ? '20px' : '40px';
-                    open = !open;
-                }, 200);
-            } else {
-                clearInterval(mouthInterval);
-                mouth.style.height = '40px';
-            }
-        }
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
 
-        function startListening() {
-            if (!audioContext) setupAudioContext();
-
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    microphone = audioContext.createMediaStreamSource(stream);
-                    microphone.connect(analyser);
-                    analyser.connect(javascriptNode);
-
-                    javascriptNode.onaudioprocess = () => {
-                        const array = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(array);
-                        const values = array.reduce((a, b) => a + b) / array.length;
-                        drawVisualizer(values);
-                        detectSpeech(values);
-                    };
-
-                    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-                    recognition.continuous = true;
-                    recognition.interimResults = true;
-
-                    recognition.onresult = handleSpeechResult;
-                    recognition.onend = () => {
-                        if (isListening) recognition.start();
-                    };
-                    recognition.onerror = handleSpeechError;
-
-                    recognition.start();
+                recognition.onstart = () => {
                     isListening = true;
                     responseDiv.textContent = "I'm listening...";
-                })
-                .catch(err => {
-                    console.error('Error accessing microphone:', err);
-                    responseDiv.textContent = "I'm having trouble hearing you. Could you check your microphone?";
-                });
+                };
+
+                recognition.onresult = handleSpeechResult;
+                recognition.onerror = handleSpeechError;
+                recognition.onend = () => {
+                    if (isListening) {
+                        recognition.start();  // Restart recognition
+                    } else {
+                        responseDiv.textContent = "Listening stopped. Click anywhere to start again.";
+                    }
+                };
+
+                recognition.start();
+            })
+            .catch(err => {
+                console.error('Error accessing microphone:', err);
+                responseDiv.textContent = "I'm having trouble hearing you. Could you check your microphone?";
+            });
+    }
+
+    function stopListening() {
+        if (recognition) {
+            isListening = false;
+            recognition.stop();
         }
-
-        function detectSpeech(audioLevel) {
-            const threshold = 30; // Adjust this value based on your needs
-            if (audioLevel > threshold) {
-                lastSpeechTimestamp = Date.now();
-                if (isAssistantSpeaking) {
-                    pauseAssistantSpeech();
-                }
-            } else if (Date.now() - lastSpeechTimestamp > 1500 && isAssistantSpeaking) {
-                resumeAssistantSpeech();
-            }
+        if (microphone) {
+            microphone.disconnect();
+            analyser.disconnect();
+            javascriptNode.disconnect();
         }
+    }
 
-        function pauseAssistantSpeech() {
-            if (currentUtterance && speechSynthesis.speaking) {
-                speechSynthesis.pause();
-                animateMouth(false);
-            }
+    function handleSpeechResult(event) {
+        const userInput = event.results[0][0].transcript;
+        responseDiv.textContent = "You said: " + userInput;
+        
+        if (userInput.toLowerCase().includes('goodbye')) {
+            stopListening();
+            respondToUser("Goodbye! It was nice talking to you.");
+            return;
         }
+        fetchResponse(userInput);
+    }
 
-        function resumeAssistantSpeech() {
-            if (currentUtterance && speechSynthesis.paused) {
-                speechSynthesis.resume();
-                animateMouth(true);
-            }
-        }
+    function handleSpeechError(event) {
+        console.error('Speech recognition error:', event.error);
+        responseDiv.textContent = "There was an error with speech recognition. Please try again.";
+        isListening = false;
+    }
 
-        function handleSpeechResult(event) {
-            const userInput = Array.from(event.results)
-                .map(result => result[0].transcript)
-                .join('');
-            
-            if (event.results[0].isFinal) {
-                if (userInput.toLowerCase().includes('goodbye')) {
-                    stopListening();
-                    respondToUser("Goodbye! It was nice talking to you.");
-                    return;
-                }
-                fetchResponse(userInput);
-            }
-        }
+    function drawVisualizer(values) {
+        visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
+        const height = values * visualizer.height / 255;
+        const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
+        gradient.addColorStop(1, '#1a2a6c');
+        gradient.addColorStop(0.5, '#b21f1f');
+        gradient.addColorStop(0, '#fdbb2d');
+        visualizerContext.fillStyle = gradient;
+        visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
+    }
 
-        function handleSpeechError(event) {
-            console.error('Speech recognition error:', event.error);
-            responseDiv.textContent = "I didn't quite catch that. Could you please repeat?";
-        }
+    async function fetchResponse(userInput) {
+        try {
+            const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ question: userInput, user_id: userId })
+            });
 
-        function stopListening() {
-            if (microphone) {
-                microphone.disconnect();
-                analyser.disconnect();
-                javascriptNode.disconnect();
-                isListening = false;
-                recognition.stop();
-            }
-        }
-
-        function drawVisualizer(values) {
-            visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
-            const height = values * visualizer.height / 255;
-            const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
-            gradient.addColorStop(1, '#1a2a6c');
-            gradient.addColorStop(0.5, '#b21f1f');
-            gradient.addColorStop(0, '#fdbb2d');
-            visualizerContext.fillStyle = gradient;
-            visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
-        }
-
-        async function fetchResponse(userInput) {
-            try {
-                const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask2', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ question: userInput, user_id: userId })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                if (data && data.answer) {
-                    respondToUser(data.answer);
-                } else {
-                    responseDiv.textContent = "I'm not sure how to respond to that. Could you rephrase?";
-                }
-            } catch (error) {
-                console.error('Error fetching response:', error);
-                responseDiv.textContent = "I'm having trouble thinking of a response. Give me a moment.";
-            }
-        }
-
-        function respondToUser(text) {
-            const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [text];
-            let currentSentence = 0;
-
-            function speakNextSentence() {
-                if (currentSentence < sentences.length) {
-                    const utterance = new SpeechSynthesisUtterance(sentences[currentSentence]);
-                    currentUtterance = utterance;
-
-                    utterance.voice = speechSynthesis.getVoices().find(voice => voice.name === 'Google UK English Male') || speechSynthesis.getVoices()[0];
-                    utterance.pitch = 1 + (Math.random() * 0.2 - 0.1); // Slight pitch variation
-                    utterance.rate = 1 + (Math.random() * 0.2 - 0.1);  // Slight rate variation
-
-                    utterance.onstart = () => {
-                        isAssistantSpeaking = true;
-                        animateMouth(true);
-                    };
-
-                    utterance.onend = () => {
-                        isAssistantSpeaking = false;
-                        animateMouth(false);
-                        currentSentence++;
-                        setTimeout(speakNextSentence, 500); // Pause between sentences
-                    };
-
-                    utterance.onerror = (event) => {
-                        console.error('SpeechSynthesis error:', event);
-                    };
-
-                    speechSynthesis.speak(utterance);
-                } else {
-                    isAssistantSpeaking = false;
-                }
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            responseDiv.textContent = text;
-            speakNextSentence();
+            const data = await response.json();
+            if (data && data.answer) {
+                respondToUser(data.answer);
+            } else {
+                responseDiv.textContent = "I'm not sure how to respond to that. Could you rephrase?";
+            }
+        } catch (error) {
+            console.error('Error fetching response:', error);
+            responseDiv.textContent = "I'm having trouble thinking of a response. Give me a moment.";
         }
+    }
 
-        function resetInactivityTimeout() {
-            if (inactivityTimeout) clearTimeout(inactivityTimeout);
-            inactivityTimeout = setTimeout(() => {
-                if (isListening && !isAssistantSpeaking) {
-                    respondToUser("Is everything okay? I'm still here if you need me.");
-                }
-            }, 30000); // 30 seconds of inactivity
-        }
+    function respondToUser(text) {
+        responseDiv.textContent = text;
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.onstart = () => animateMouth(true);
+        utterance.onend = () => {
+            animateMouth(false);
+            if (isListening) {
+                recognition.start();  // Restart listening after speaking
+            }
+        };
+        utterance.onerror = (event) => {
+            console.error('SpeechSynthesis error:', event);
+            animateMouth(false);
+        };
 
-        startListening();
-        animateAvatar();
-        resetInactivityTimeout();
-    });
+        speechSynthesis.speak(utterance);
+    }
+
+    animateAvatar();
+    document.body.addEventListener('click', toggleListening);
+});
     </script>
 </body>
 </html>
