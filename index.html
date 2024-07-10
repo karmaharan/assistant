@@ -165,25 +165,19 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
   }
 
-  async function setupAudioContext() {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      analyser = audioContext.createAnalyser();
-      analyser.smoothingTimeConstant = 0.8;
-      analyser.fftSize = 1024;
+  function setupAudioContext() {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
 
-      const audioWorkletNode = new AudioWorkletNode(audioContext, 'processor');
-      audioContext.audioWorklet.addModule('processor.js').then(() => {
-        audioWorkletNode.connect(audioContext.destination);
-      });
+    analyser.smoothingTimeConstant = 0.8;
+    analyser.fftSize = 1024;
 
-      javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-      javascriptNode.connect(audioContext.destination);
-    }
+    javascriptNode.connect(audioContext.destination);
   }
 
   function startListening() {
-    setupAudioContext();
+    if (!audioContext) setupAudioContext();
 
     if (speechSynthesis.speaking) {
       speechSynthesis.cancel();
@@ -376,16 +370,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }, 10000); // 10 seconds
   }
 
-  // Add a button to start the audio context
-  const startButton = document.createElement('button');
-  startButton.textContent = "Start Assistant";
-  document.body.appendChild(startButton);
-  
-  startButton.addEventListener('click', () => {
-    setupAudioContext();
-    startTriggerListening();
-  });
-
+  startTriggerListening();
   animateEyes();
 });
 
