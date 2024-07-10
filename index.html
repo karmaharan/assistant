@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   let triggerRecognition;
   let userId = 'user123'; // Replace with actual user ID if available
   let mouthInterval;
-  const triggerWord = 'pink mango'; // Your trigger word
+  const triggerWord = 'hello assistant'; // Your trigger word
 
   function animateEyes() {
     const maxMove = 5;
@@ -278,43 +278,49 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
         utterance.onend = () => {
           animateMouth(false);
-          startListening(); // Restart listening after response is complete
+          startTriggerListening(); // Restart listening for trigger word after response is complete
         };
 
         responseDiv.textContent = data.answer;
         speechSynthesis.speak(utterance);
-        visualizeAIResponse(utterance);
+        monitorUserSpeechDuringResponse();
       } else {
         responseDiv.textContent = "No answer received.";
-        startListening(); // Restart listening if no answer received
+        startTriggerListening(); // Restart listening for trigger word if no answer received
       }
     } catch (error) {
       console.error('Error fetching response:', error);
       responseDiv.textContent = "Error fetching response. Please try again.";
-      startListening(); // Restart listening on error
+      startTriggerListening(); // Restart listening for trigger word on error
     }
   }
 
-  function visualizeAIResponse(utterance) {
-    utterance.onstart = () => {
-      const drawAIVisualizer = () => {
-        visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
-        const values = Math.random() * visualizer.height;
-        const height = values * visualizer.height / 255;
-        const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
-        gradient.addColorStop(1, '#1a2a6c');
-        gradient.addColorStop(0.5, '#b21f1f');
-        gradient.addColorStop(0, '#fdbb2d');
-        visualizerContext.fillStyle = gradient;
-        visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
-        if (!speechSynthesis.speaking) {
-          cancelAnimationFrame(drawAIVisualizer);
-        } else {
-          requestAnimationFrame(drawAIVisualizer);
-        }
-      };
-      requestAnimationFrame(drawAIVisualizer);
-    };
+  function monitorUserSpeechDuringResponse() {
+    if (!audioContext) setupAudioContext();
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        const userMicrophone = audioContext.createMediaStreamSource(stream);
+        userMicrophone.connect(analyser);
+
+        javascriptNode.onaudioprocess = () => {
+          const array = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(array);
+          const values = array.reduce((a, b) => a + b) / array.length;
+
+          if (values > 0) { // Threshold value for detecting user speech
+            if (speechSynthesis.speaking) {
+              speechSynthesis.cancel();
+              startTriggerListening(); // Restart listening for trigger word
+            }
+          }
+        };
+
+        analyser.connect(javascriptNode);
+      })
+      .catch(err => {
+        console.error('Error accessing microphone:', err);
+      });
   }
 
   function startTriggerListening() {
