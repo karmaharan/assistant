@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   let triggerRecognition;
   let userId = 'user123'; // Replace with actual user ID if available
   let mouthInterval;
+  let inactivityTimeout;
   const triggerWord = 'hello assistant'; // Your trigger word
 
   function animateEyes() {
@@ -205,7 +206,14 @@ document.addEventListener('DOMContentLoaded', (event) => {
                                 .join('');
           responseDiv.textContent = userInput;
 
+          resetInactivityTimeout();
+
           if (event.results[0].isFinal) {
+            if (userInput.toLowerCase().includes('bye')) {
+              stopListening();
+              responseDiv.textContent = "Goodbye!";
+              return;
+            }
             stopListening();
             fetchResponse(userInput);
           }
@@ -353,10 +361,20 @@ document.addEventListener('DOMContentLoaded', (event) => {
     responseDiv.textContent = "Listening for trigger word...";
   }
 
+  function resetInactivityTimeout() {
+    if (inactivityTimeout) clearTimeout(inactivityTimeout);
+    inactivityTimeout = setTimeout(() => {
+      if (isListening) {
+        responseDiv.textContent = "Goodbye!";
+        stopListening();
+        startTriggerListening();
+      }
+    }, 10000); // 10 seconds
+  }
+
   startTriggerListening();
   animateEyes();
 });
-
-  </script>
+ </script>
 </body>
 </html>
