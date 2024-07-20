@@ -45,6 +45,7 @@
             background: #f0f0f0;
             position: relative;
             overflow: hidden;
+            transition: all 0.5s ease;
         }
         .eye {
             width: 30px;
@@ -109,6 +110,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const leftEye = document.querySelector('.eye.left');
     const rightEye = document.querySelector('.eye.right');
     const mouth = document.querySelector('.mouth');
+    const avatarFace = document.querySelector('.avatar-face');
     const visualizer = document.getElementById('visualizer');
     const visualizerContext = visualizer.getContext('2d');
 
@@ -120,6 +122,13 @@ document.addEventListener('DOMContentLoaded', (event) => {
     let javascriptNode;
     let userId = 'user123';
     let mouthInterval;
+
+    const emotions = {
+        happy: { color: '#FFD700', mouthShape: '0 0 80px 80px' },
+        sad: { color: '#4169E1', mouthShape: '80px 80px 0 0' },
+        neutral: { color: '#f0f0f0', mouthShape: '0 0 40px 40px' },
+        angry: { color: '#FF4500', mouthShape: '80px 80px 0 0' }
+    };
 
     function setupAudioContext() {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -133,7 +142,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
 
     function animateAvatar() {
-        // Eye movement
         setInterval(() => {
             const maxMove = 5;
             const leftX = Math.random() * maxMove - maxMove / 2;
@@ -145,7 +153,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
             rightEye.style.transform = `translate(${rightX}px, ${rightY}px)`;
         }, 2000);
 
-        // Blinking
         setInterval(() => {
             leftEye.style.height = '0px';
             rightEye.style.height = '0px';
@@ -168,6 +175,11 @@ document.addEventListener('DOMContentLoaded', (event) => {
             clearInterval(mouthInterval);
             mouth.style.height = '40px';
         }
+    }
+
+    function setEmotion(emotion) {
+        avatarFace.style.background = emotions[emotion].color;
+        mouth.style.borderRadius = emotions[emotion].mouthShape;
     }
 
     function toggleListening() {
@@ -206,13 +218,14 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 recognition.onstart = () => {
                     isListening = true;
                     responseDiv.textContent = "I'm listening...";
+                    setEmotion('neutral');
                 };
 
                 recognition.onresult = handleSpeechResult;
                 recognition.onerror = handleSpeechError;
                 recognition.onend = () => {
                     if (isListening) {
-                        recognition.start();  // Restart recognition
+                        recognition.start();
                     } else {
                         responseDiv.textContent = "Listening stopped. Click anywhere to start again.";
                     }
@@ -223,6 +236,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
             .catch(err => {
                 console.error('Error accessing microphone:', err);
                 responseDiv.textContent = "I'm having trouble hearing you. Could you check your microphone?";
+                setEmotion('sad');
             });
     }
 
@@ -244,7 +258,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         
         if (userInput.toLowerCase().includes('goodbye')) {
             stopListening();
-            respondToUser("Goodbye! It was nice talking to you.");
+            respondToUser("Goodbye! It was nice talking to you.", 'sad');
             return;
         }
         fetchResponse(userInput);
@@ -254,6 +268,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         console.error('Speech recognition error:', event.error);
         responseDiv.textContent = "There was an error with speech recognition. Please try again.";
         isListening = false;
+        setEmotion('sad');
     }
 
     function drawVisualizer(values) {
@@ -283,25 +298,42 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
             const data = await response.json();
             if (data && data.answer) {
-                respondToUser(data.answer);
+                const emotion = detectEmotion(data.answer);
+                respondToUser(data.answer, emotion);
             } else {
                 responseDiv.textContent = "I'm not sure how to respond to that. Could you rephrase?";
+                setEmotion('neutral');
             }
         } catch (error) {
             console.error('Error fetching response:', error);
             responseDiv.textContent = "I'm having trouble thinking of a response. Give me a moment.";
+            setEmotion('sad');
         }
     }
 
-    function respondToUser(text) {
+    function detectEmotion(text) {
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('happy') || lowerText.includes('glad') || lowerText.includes('excited')) {
+            return 'happy';
+        } else if (lowerText.includes('sad') || lowerText.includes('sorry') || lowerText.includes('unfortunate')) {
+            return 'sad';
+        } else if (lowerText.includes('angry') || lowerText.includes('frustrated') || lowerText.includes('upset')) {
+            return 'angry';
+        } else {
+            return 'neutral';
+        }
+    }
+
+    function respondToUser(text, emotion) {
         responseDiv.textContent = text;
+        setEmotion(emotion);
         
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.onstart = () => animateMouth(true);
         utterance.onend = () => {
             animateMouth(false);
             if (isListening) {
-                recognition.start();  // Restart listening after speaking
+                recognition.start();
             }
         };
         utterance.onerror = (event) => {
@@ -309,7 +341,24 @@ document.addEventListener('DOMContentLoaded', (event) => {
             animateMouth(false);
         };
 
-        speechSynthesis.speak(utterance);
+        const sentences = text.split(/[.!?]+/).filter(sentence => sentence.trim() !== '');
+        let delay = 0;
+
+        sentences.forEach((sentence, index) => {
+            setTimeout(() => {
+                const sentenceUtterance = new SpeechSynthesisUtterance(sentence);
+                sentenceUtterance.rate = 0.9 + Math.random() * 0.2;
+                speechSynthesis.speak(sentenceUtterance);
+
+                if (index < sentences.length - 1) {
+                    setTimeout(() => {
+                        animateMouth(false);
+                    }, sentenceUtterance.text.length * 50);
+                }
+            }, delay);
+
+            delay += sentence.length * 50 + 500;
+        });
     }
 
     animateAvatar();
