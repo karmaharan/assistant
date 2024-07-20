@@ -5,6 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Humanistic AI Assistant - Real-time Voice Interaction</title>
     <style>
+        #startListeningButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #startListeningButton:hover {
+            background-color: #45a049;
+        }
+        #listeningIndicator {
+            margin-top: 10px;
+            padding: 5px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
@@ -100,6 +121,7 @@
         <div class="response" id="response">
             Hello! I'm your AI Assistant. Just start speaking, and I'll listen.
         </div>
+        <button id="startListeningButton">Start Listening</button>
         <div id="listeningIndicator"></div>
         <canvas id="visualizer"></canvas>
     </div>
