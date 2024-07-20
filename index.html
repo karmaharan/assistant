@@ -100,269 +100,112 @@
         <div class="response" id="response">
             Hello! I'm your AI Assistant. Just start speaking, and I'll listen.
         </div>
+        <div id="listeningIndicator"></div>
         <canvas id="visualizer"></canvas>
     </div>
 
     <script>
-document.addEventListener('DOMContentLoaded', (event) => {
-    const responseDiv = document.getElementById('response');
-    const leftEye = document.querySelector('.eye.left');
-    const rightEye = document.querySelector('.eye.right');
-    const mouth = document.querySelector('.mouth');
-    const avatarFace = document.querySelector('.avatar-face');
-    const visualizer = document.getElementById('visualizer');
-    const visualizerContext = visualizer.getContext('2d');
+function setupSpeechRecognition() {
+    if (!('webkitSpeechRecognition' in window)) {
+        responseDiv.textContent = "Speech recognition is not supported in this browser. Please try Chrome.";
+        return;
+    }
 
-    let isListening = false;
-    let recognition;
-    let audioContext;
-    let analyser;
-    let microphone;
-    let javascriptNode;
-    let userId = 'user123';
-    let mouthInterval;
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
 
-    const emotions = {
-        happy: { color: '#FFD700', mouthShape: '0 0 80px 80px' },
-        sad: { color: '#4169E1', mouthShape: '80px 80px 0 0' },
-        neutral: { color: '#f0f0f0', mouthShape: '0 0 40px 40px' },
-        angry: { color: '#FF4500', mouthShape: '80px 80px 0 0' }
+    let silenceTimer;
+    const silenceDelay = 1500; // 1.5 seconds of silence before stopping
+
+    recognition.onstart = () => {
+        isListening = true;
+        responseDiv.textContent = "I'm listening...";
+        setEmotion('neutral');
+        updateListeningIndicator(true);
     };
 
-    function setupAudioContext() {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-
-        analyser.smoothingTimeConstant = 0.8;
-        analyser.fftSize = 1024;
-
-        javascriptNode.connect(audioContext.destination);
-    }
-
-    function animateAvatar() {
-        setInterval(() => {
-            const maxMove = 5;
-            const leftX = Math.random() * maxMove - maxMove / 2;
-            const leftY = Math.random() * maxMove - maxMove / 2;
-            const rightX = Math.random() * maxMove - maxMove / 2;
-            const rightY = Math.random() * maxMove - maxMove / 2;
-
-            leftEye.style.transform = `translate(${leftX}px, ${leftY}px)`;
-            rightEye.style.transform = `translate(${rightX}px, ${rightY}px)`;
-        }, 2000);
-
-        setInterval(() => {
-            leftEye.style.height = '0px';
-            rightEye.style.height = '0px';
-            setTimeout(() => {
-                leftEye.style.height = '30px';
-                rightEye.style.height = '30px';
-            }, 200);
-        }, 5000);
-    }
-
-    function animateMouth(talking) {
-        if (talking) {
-            clearInterval(mouthInterval);
-            let open = true;
-            mouthInterval = setInterval(() => {
-                mouth.style.height = open ? '20px' : '40px';
-                open = !open;
-            }, 200);
-        } else {
-            clearInterval(mouthInterval);
-            mouth.style.height = '40px';
-        }
-    }
-
-    function setEmotion(emotion) {
-        avatarFace.style.background = emotions[emotion].color;
-        mouth.style.borderRadius = emotions[emotion].mouthShape;
-    }
-
-    function toggleListening() {
-        if (isListening) {
-            stopListening();
-        } else {
-            startListening();
-        }
-    }
-
-    function startListening() {
-        if (!('webkitSpeechRecognition' in window)) {
-            responseDiv.textContent = "Speech recognition is not supported in this browser. Please try Chrome.";
-            return;
-        }
-
-        setupAudioContext();
-
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                microphone = audioContext.createMediaStreamSource(stream);
-                microphone.connect(analyser);
-                analyser.connect(javascriptNode);
-
-                javascriptNode.onaudioprocess = () => {
-                    const array = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(array);
-                    const values = array.reduce((a, b) => a + b) / array.length;
-                    drawVisualizer(values);
-                };
-
-                recognition = new webkitSpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-
-                recognition.onstart = () => {
-                    isListening = true;
-                    responseDiv.textContent = "I'm listening...";
-                    setEmotion('neutral');
-                };
-
-                recognition.onresult = handleSpeechResult;
-                recognition.onerror = handleSpeechError;
-                recognition.onend = () => {
-                    if (isListening) {
-                        recognition.start();
-                    } else {
-                        responseDiv.textContent = "Listening stopped. Click anywhere to start again.";
-                    }
-                };
-
-                recognition.start();
-            })
-            .catch(err => {
-                console.error('Error accessing microphone:', err);
-                responseDiv.textContent = "I'm having trouble hearing you. Could you check your microphone?";
-                setEmotion('sad');
-            });
-    }
-
-    function stopListening() {
-        if (recognition) {
-            isListening = false;
-            recognition.stop();
-        }
-        if (microphone) {
-            microphone.disconnect();
-            analyser.disconnect();
-            javascriptNode.disconnect();
-        }
-    }
-
-    function handleSpeechResult(event) {
-        const userInput = event.results[0][0].transcript;
-        responseDiv.textContent = "You said: " + userInput;
+    recognition.onresult = (event) => {
+        clearTimeout(silenceTimer);
+        const resultIndex = event.results.length - 1;
+        const transcript = event.results[resultIndex][0].transcript;
         
-        if (userInput.toLowerCase().includes('goodbye')) {
-            stopListening();
-            respondToUser("Goodbye! It was nice talking to you.", 'sad');
-            return;
+        if (event.results[resultIndex].isFinal) {
+            handleFinalResult(transcript);
+        } else {
+            responseDiv.textContent = "I heard: " + transcript;
         }
-        fetchResponse(userInput);
-    }
 
-    function handleSpeechError(event) {
-        console.error('Speech recognition error:', event.error);
-        responseDiv.textContent = "There was an error with speech recognition. Please try again.";
-        isListening = false;
-        setEmotion('sad');
-    }
+        // Reset the silence timer
+        silenceTimer = setTimeout(() => {
+            recognition.stop();
+        }, silenceDelay);
+    };
 
-    function drawVisualizer(values) {
-        visualizerContext.clearRect(0, 0, visualizer.width, visualizer.height);
-        const height = values * visualizer.height / 255;
-        const gradient = visualizerContext.createLinearGradient(0, 0, 0, visualizer.height);
-        gradient.addColorStop(1, '#1a2a6c');
-        gradient.addColorStop(0.5, '#b21f1f');
-        gradient.addColorStop(0, '#fdbb2d');
-        visualizerContext.fillStyle = gradient;
-        visualizerContext.fillRect(0, visualizer.height - height, visualizer.width, height);
-    }
-
-    async function fetchResponse(userInput) {
-        try {
-            const response = await fetch('https://clean-rodent-stable.ngrok-free.app/ask2', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ question: userInput, user_id: userId })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            if (data && data.answer) {
-                const emotion = detectEmotion(data.answer);
-                respondToUser(data.answer, emotion);
-            } else {
-                responseDiv.textContent = "I'm not sure how to respond to that. Could you rephrase?";
-                setEmotion('neutral');
-            }
-        } catch (error) {
-            console.error('Error fetching response:', error);
-            responseDiv.textContent = "I'm having trouble thinking of a response. Give me a moment.";
+    recognition.onerror = (event) => {
+        if (event.error === 'no-speech') {
+            console.log('No speech detected. Restarting recognition...');
+            recognition.stop();
+        } else {
+            console.error('Speech recognition error:', event.error);
+            responseDiv.textContent = "There was an error with speech recognition. Please try again.";
             setEmotion('sad');
         }
-    }
+        updateListeningIndicator(false);
+    };
 
-    function detectEmotion(text) {
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('happy') || lowerText.includes('glad') || lowerText.includes('excited')) {
-            return 'happy';
-        } else if (lowerText.includes('sad') || lowerText.includes('sorry') || lowerText.includes('unfortunate')) {
-            return 'sad';
-        } else if (lowerText.includes('angry') || lowerText.includes('frustrated') || lowerText.includes('upset')) {
-            return 'angry';
+    recognition.onend = () => {
+        if (isListening) {
+            recognition.start();
         } else {
-            return 'neutral';
+            responseDiv.textContent = "Listening stopped. Click anywhere to start again.";
+            updateListeningIndicator(false);
         }
+    };
+}
+
+function updateListeningIndicator(isListening) {
+    // Update UI to show whether the system is listening or not
+    const indicator = document.getElementById('listeningIndicator');
+    if (indicator) {
+        indicator.style.backgroundColor = isListening ? 'green' : 'red';
+        indicator.textContent = isListening ? 'Listening' : 'Not Listening';
     }
+}
 
-    function respondToUser(text, emotion) {
-        responseDiv.textContent = text;
-        setEmotion(emotion);
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.onstart = () => animateMouth(true);
-        utterance.onend = () => {
-            animateMouth(false);
-            if (isListening) {
-                recognition.start();
-            }
-        };
-        utterance.onerror = (event) => {
-            console.error('SpeechSynthesis error:', event);
-            animateMouth(false);
-        };
-
-        const sentences = text.split(/[.!?]+/).filter(sentence => sentence.trim() !== '');
-        let delay = 0;
-
-        sentences.forEach((sentence, index) => {
-            setTimeout(() => {
-                const sentenceUtterance = new SpeechSynthesisUtterance(sentence);
-                sentenceUtterance.rate = 0.9 + Math.random() * 0.2;
-                speechSynthesis.speak(sentenceUtterance);
-
-                if (index < sentences.length - 1) {
-                    setTimeout(() => {
-                        animateMouth(false);
-                    }, sentenceUtterance.text.length * 50);
-                }
-            }, delay);
-
-            delay += sentence.length * 50 + 500;
-        });
+function handleFinalResult(transcript) {
+    responseDiv.textContent = "You said: " + transcript;
+    
+    if (transcript.toLowerCase().includes('goodbye')) {
+        stopListening();
+        respondToUser("Goodbye! It was nice talking to you.", 'sad');
+    } else {
+        fetchResponse(transcript);
     }
+}
 
-    animateAvatar();
-    document.body.addEventListener('click', toggleListening);
-});
+function toggleListening() {
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+}
+
+function startListening() {
+    setupSpeechRecognition();
+    recognition.start();
+}
+
+function stopListening() {
+    isListening = false;
+    if (recognition) {
+        recognition.stop();
+    }
+}
+
+// Don't forget to call setupSpeechRecognition() when the page loads
+document.addEventListener('DOMContentLoaded', setupSpeechRecognition);
     </script>
 </body>
 </html>
